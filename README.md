@@ -63,6 +63,12 @@ macOS標準のアクセシビリティ設定（grayscale）を Hammerspoon で�
    
    <img src="images/9_reload.jpg" width="50%">
 
+10. 対象時間内になると、グレースケールに切り替わり、毎分通知が来るようになります
+    
+    <img src="images/10_gray.jpg" width="50%">
+
+対象時間外では、グレーのフィルターは外れ、通知も止まります。
+
 ## Verify
 - 設定ファイル:
 ```bash
