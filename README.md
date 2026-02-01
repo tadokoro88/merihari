@@ -31,8 +31,14 @@ macOS標準のアクセシビリティ設定（grayscale）を Hammerspoon で�
 
 ## Install
 1. システム設定 → アクセシビリティ → ディスプレイ → カラーフィルタ → フィルタタイプが「グレイスケール」になっていることを確認します
+   
+   <img src="images/1_grayscale.jpg" width="70%">
+
 2. システム設定 → アクセシビリティ → ショートカット で カラーフィルタ以外のチェックを全て外します
-3. Hammerspoon をインストールします
+   
+   <img src="images/2_shorcuts.jpg" width="70%">
+
+3. ターミナルを開いて Hammerspoon をインストールします
    ```bash
    brew install --cask hammerspoon
    ```
@@ -44,10 +50,18 @@ macOS標準のアクセシビリティ設定（grayscale）を Hammerspoon で�
    ./setup.sh
    ```
 5. Applications フォルダから Hammerspoon を起動します
+   
+   <img src="images/5_hammerspoon.jpg" width="70%">
+
 6. アクセシビリティの権限を許可します（プロンプトが表示されます）
 7. 通知の権限を許可します（システム設定 → 通知 → Hammerspoon で「通知を許可」をオンにする）
 8. Hammerspoon の Preferences で「Launch Hammerspoon at login」にチェックを入れます
+   
+   <img src="images/8_preferences.jpg" width="50%">
+
 9. メニューバーの Hammerspoon アイコン → Reload Config をクリックします
+   
+   <img src="images/9_reload.jpg" width="50%">
 
 ## Verify
 - 設定ファイル:
@@ -93,3 +107,4 @@ Hammerspoon にアクセシビリティの操作を許可してください。
 # Hammerspoon Console で実行
 hs.reload()
 ```
+   <img src="images/hammerspoon-console.jpg" width="50%">

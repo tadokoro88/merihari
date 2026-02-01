@@ -79,7 +79,7 @@ local function apply_state()
     if should_be_on then
         hs.notify.new({
             title="Merihari",
-            informativeText="私を閉じてほしいです",
+            informativeText="メリハリつけていきましょう",
             soundName="default",
             withdrawAfter=0
         }):send()
