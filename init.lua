@@ -54,25 +54,27 @@ local function toggle_grayscale()
     ]])
 end
 
--- Track if screen is locked/asleep
-local screen_is_locked = false
-
 -- Apply correct state
 local function apply_state()
-    -- Skip everything if screen is locked or asleep
-    if screen_is_locked then
-        return
-    end
-    
     local should_be_on = should_be_grayscale()
     local is_on = is_grayscale_on()
     
     if should_be_on and not is_on then
         toggle_grayscale()
-        print("Merihari: turned ON")
+        hs.timer.usleep(300000)
+        if is_grayscale_on() then
+            print("Merihari: turned ON")
+        else
+            print("Merihari: failed to turn ON (check accessibility permission and color filter shortcut settings)")
+        end
     elseif not should_be_on and is_on then
         toggle_grayscale()
-        print("Merihari: turned OFF")
+        hs.timer.usleep(300000)
+        if not is_grayscale_on() then
+            print("Merihari: turned OFF")
+        else
+            print("Merihari: failed to turn OFF (check accessibility permission and color filter shortcut settings)")
+        end
     end
     
     -- Show notification every minute while in time window
@@ -95,14 +97,11 @@ apply_state()
 -- Apply on wake from sleep
 hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
-        screen_is_locked = false
         hs.timer.doAfter(1, apply_state)
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
-        screen_is_locked = false
         hs.timer.doAfter(1, apply_state)
-    elseif event == hs.caffeinate.watcher.screensDidLock or 
-           event == hs.caffeinate.watcher.systemWillSleep then
-        screen_is_locked = true
+    elseif event == hs.caffeinate.watcher.sessionDidBecomeActive then
+        hs.timer.doAfter(1, apply_state)
     end
 end):start()
 
