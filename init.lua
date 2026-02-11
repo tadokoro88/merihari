@@ -54,8 +54,29 @@ local function toggle_grayscale()
     ]])
 end
 
+-- Track session activity as a fallback for lock detection.
+local session_is_active = true
+
+-- Detect whether current GUI session is locked/inactive.
+local function is_session_locked()
+    local ok, props = pcall(hs.caffeinate.sessionProperties)
+    if ok and type(props) == "table" then
+        if props.CGSSessionScreenIsLocked == 1 then
+            return true
+        end
+        if props.kCGSSessionOnConsoleKey == 0 then
+            return true
+        end
+    end
+    return not session_is_active
+end
+
 -- Apply correct state
 local function apply_state()
+    if is_session_locked() then
+        return
+    end
+
     local should_be_on = should_be_grayscale()
     local is_on = is_grayscale_on()
     
@@ -97,10 +118,24 @@ apply_state()
 -- Apply on wake from sleep
 hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
+        session_is_active = true
         hs.timer.doAfter(1, apply_state)
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
+        session_is_active = true
         hs.timer.doAfter(1, apply_state)
     elseif event == hs.caffeinate.watcher.sessionDidBecomeActive then
+        session_is_active = true
+        hs.timer.doAfter(1, apply_state)
+    elseif event == hs.caffeinate.watcher.screensDidLock then
+        session_is_active = false
+    elseif event == hs.caffeinate.watcher.systemWillSleep then
+        session_is_active = false
+    elseif event == hs.caffeinate.watcher.sessionDidResignActive then
+        session_is_active = false
+    elseif event == hs.caffeinate.watcher.screensDidSleep then
+        session_is_active = false
+    elseif event == hs.caffeinate.watcher.screensDidWake then
+        session_is_active = true
         hs.timer.doAfter(1, apply_state)
     end
 end):start()
