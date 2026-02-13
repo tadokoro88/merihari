@@ -54,26 +54,41 @@ local function toggle_grayscale()
     ]])
 end
 
--- Track session activity as a fallback for lock detection.
+-- Track session activity and recover if unlock events are missed.
 local session_is_active = true
 
--- Detect whether current GUI session is locked/inactive.
-local function is_session_locked()
+local function session_looks_active()
     local ok, props = pcall(hs.caffeinate.sessionProperties)
-    if ok and type(props) == "table" then
-        if props.CGSSessionScreenIsLocked == 1 then
-            return true
-        end
-        if props.kCGSSessionOnConsoleKey == 0 then
-            return true
-        end
+    if not ok or type(props) ~= "table" then
+        return nil
     end
-    return not session_is_active
+    if props.CGSSessionScreenIsLocked == 1 then
+        return false
+    end
+    if props.kCGSSessionOnConsoleKey == 0 then
+        return false
+    end
+    return true
+end
+
+local function should_skip_for_inactive_session()
+    if session_is_active then
+        return false
+    end
+
+    -- Recover automatically when unlock/wake event was missed.
+    local active = session_looks_active()
+    if active == true then
+        session_is_active = true
+        return false
+    end
+
+    return true
 end
 
 -- Apply correct state
 local function apply_state()
-    if is_session_locked() then
+    if should_skip_for_inactive_session() then
         return
     end
 
