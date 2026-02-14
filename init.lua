@@ -54,9 +54,6 @@ local function toggle_grayscale()
     ]])
 end
 
--- Track session activity and recover if unlock events are missed.
-local session_is_active = true
-
 local function session_looks_active()
     local ok, props = pcall(hs.caffeinate.sessionProperties)
     if not ok or type(props) ~= "table" then
@@ -72,18 +69,9 @@ local function session_looks_active()
 end
 
 local function should_skip_for_inactive_session()
-    if session_is_active then
-        return false
-    end
-
-    -- Recover automatically when unlock/wake event was missed.
     local active = session_looks_active()
-    if active == true then
-        session_is_active = true
-        return false
-    end
-
-    return true
+    -- Treat unknown session state as inactive to avoid toggling/notify while unavailable.
+    return active ~= true
 end
 
 -- Apply correct state
@@ -130,28 +118,23 @@ hs.timer.doEvery(60, apply_state)
 -- Apply immediately on load
 apply_state()
 
--- Apply on wake from sleep
+-- Coalesce wake/unlock events into one delayed apply_state run.
+local wake_apply_timer = nil
+local function queue_apply_state()
+    if wake_apply_timer then
+        wake_apply_timer:stop()
+    end
+    wake_apply_timer = hs.timer.doAfter(1, apply_state)
+end
+
+-- Apply on key session-activation events.
 hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
-        session_is_active = true
-        hs.timer.doAfter(1, apply_state)
+        queue_apply_state()
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
-        session_is_active = true
-        hs.timer.doAfter(1, apply_state)
+        queue_apply_state()
     elseif event == hs.caffeinate.watcher.sessionDidBecomeActive then
-        session_is_active = true
-        hs.timer.doAfter(1, apply_state)
-    elseif event == hs.caffeinate.watcher.screensDidLock then
-        session_is_active = false
-    elseif event == hs.caffeinate.watcher.systemWillSleep then
-        session_is_active = false
-    elseif event == hs.caffeinate.watcher.sessionDidResignActive then
-        session_is_active = false
-    elseif event == hs.caffeinate.watcher.screensDidSleep then
-        session_is_active = false
-    elseif event == hs.caffeinate.watcher.screensDidWake then
-        session_is_active = true
-        hs.timer.doAfter(1, apply_state)
+        queue_apply_state()
     end
 end):start()
 
