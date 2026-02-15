@@ -71,7 +71,17 @@ end
 local function should_skip_for_inactive_session()
     local active = session_looks_active()
     -- Treat unknown session state as inactive to avoid toggling/notify while unavailable.
-    return active ~= true
+    if active ~= true then
+        return true
+    end
+
+    -- Also skip when display is idle (e.g., dark/background wake before user interaction).
+    local ok, display_idle = pcall(hs.caffeinate.get, "displayIdle")
+    if ok and display_idle == true then
+        return true
+    end
+
+    return false
 end
 
 -- Apply correct state
