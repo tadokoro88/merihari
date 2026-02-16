@@ -2,6 +2,26 @@
 -- Automatically toggles grayscale based on time window
 
 local config_file = os.getenv("HOME") .. "/.config/merihari/config"
+local consecutive_failures = {
+    on = 0,
+    off = 0,
+}
+
+local function reset_failure_count(mode)
+    consecutive_failures[mode] = 0
+end
+
+local function log_every_five_failures(mode)
+    consecutive_failures[mode] = consecutive_failures[mode] + 1
+    if consecutive_failures[mode] >= 5 then
+        if mode == "on" then
+            print("Merihari: failed to turn ON (check accessibility permission and color filter shortcut settings)")
+        else
+            print("Merihari: failed to turn OFF (check accessibility permission and color filter shortcut settings)")
+        end
+        consecutive_failures[mode] = 0
+    end
+end
 
 -- Read config
 local function read_config()
@@ -97,17 +117,19 @@ local function apply_state()
         toggle_grayscale()
         hs.timer.usleep(300000)
         if is_grayscale_on() then
+            reset_failure_count("on")
             print("Merihari: turned ON")
         else
-            print("Merihari: failed to turn ON (check accessibility permission and color filter shortcut settings)")
+            log_every_five_failures("on")
         end
     elseif not should_be_on and is_on then
         toggle_grayscale()
         hs.timer.usleep(300000)
         if not is_grayscale_on() then
+            reset_failure_count("off")
             print("Merihari: turned OFF")
         else
-            print("Merihari: failed to turn OFF (check accessibility permission and color filter shortcut settings)")
+            log_every_five_failures("off")
         end
     end
     
