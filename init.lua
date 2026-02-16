@@ -131,6 +131,7 @@ apply_state()
 -- Coalesce wake/unlock events into one delayed apply_state run.
 local wake_apply_timer = nil
 local function queue_apply_state()
+    hs.notify.withdrawAll()
     if wake_apply_timer then
         wake_apply_timer:stop()
     end
