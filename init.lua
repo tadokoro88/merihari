@@ -95,12 +95,6 @@ local function should_skip_for_inactive_session()
         return true
     end
 
-    -- Also skip when display is idle (e.g., dark/background wake before user interaction).
-    local ok, display_idle = pcall(hs.caffeinate.get, "displayIdle")
-    if ok and display_idle == true then
-        return true
-    end
-
     return false
 end
 
