@@ -15,9 +15,9 @@ local function log_every_five_failures(mode)
     consecutive_failures[mode] = consecutive_failures[mode] + 1
     if consecutive_failures[mode] >= 5 then
         if mode == "on" then
-            print("Merihari: failed to turn ON (check accessibility permission and color filter shortcut settings)")
+            print("Merihari: failed to turn ON (session may be locked/asleep, or accessibility/shortcut settings may be unavailable)")
         else
-            print("Merihari: failed to turn OFF (check accessibility permission and color filter shortcut settings)")
+            print("Merihari: failed to turn OFF (session may be locked/asleep, or accessibility/shortcut settings may be unavailable)")
         end
         consecutive_failures[mode] = 0
     end
