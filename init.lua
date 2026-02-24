@@ -139,7 +139,7 @@ local function apply_state()
 end
 
 -- Check every 60 seconds
-hs.timer.doEvery(60, apply_state)
+local apply_state_timer = hs.timer.doEvery(60, apply_state)
 
 -- Apply immediately on load
 apply_state()
@@ -155,7 +155,7 @@ local function queue_apply_state()
 end
 
 -- Apply on key session-activation events.
-hs.caffeinate.watcher.new(function(event)
+local caffeinate_watcher = hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
         queue_apply_state()
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
@@ -163,6 +163,7 @@ hs.caffeinate.watcher.new(function(event)
     elseif event == hs.caffeinate.watcher.sessionDidBecomeActive then
         queue_apply_state()
     end
-end):start()
+end)
+caffeinate_watcher:start()
 
 print("Merihari loaded")
