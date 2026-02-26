@@ -2,10 +2,17 @@
 -- Automatically toggles grayscale based on time window
 
 local config_file = os.getenv("HOME") .. "/.config/merihari/config"
+local debug_mode = false
 local consecutive_failures = {
     on = 0,
     off = 0,
 }
+
+local function debug_log(message)
+    if debug_mode then
+        print("Merihari [debug]: " .. message)
+    end
+end
 
 local function reset_failure_count(mode)
     consecutive_failures[mode] = 0
@@ -13,6 +20,7 @@ end
 
 local function log_every_five_failures(mode)
     consecutive_failures[mode] = consecutive_failures[mode] + 1
+    debug_log(mode .. " failure count=" .. tostring(consecutive_failures[mode]))
     if consecutive_failures[mode] >= 5 then
         if mode == "on" then
             print("Merihari: failed to turn ON (session may be locked/asleep, or accessibility/shortcut settings may be unavailable)")
@@ -27,23 +35,26 @@ end
 local function read_config()
     local file = io.open(config_file, "r")
     if not file then
-        return "2100", "0600"  -- defaults
+        debug_mode = false
+        return "2100", "0600", false  -- defaults
     end
     
-    local start, end_time = "2100", "0600"
+    local start, end_time, debug = "2100", "0600", "0"
     for line in file:lines() do
         local s = line:match("START=(%d+)")
         local e = line:match("END=(%d+)")
+        local d = line:match("DEBUG=(%d+)")
         if s then start = s end
         if e then end_time = e end
+        if d then debug = d end
     end
     file:close()
-    return start, end_time
+    debug_mode = (debug == "1")
+    return start, end_time, debug_mode
 end
 
 -- Check if current time is in window
-local function should_be_grayscale()
-    local start, end_time = read_config()
+local function should_be_grayscale(start, end_time)
     local now = os.date("%H%M")
     
     start = tonumber(start)
@@ -92,22 +103,27 @@ local function should_skip_for_inactive_session()
     local active = session_looks_active()
     -- Treat unknown session state as inactive to avoid toggling/notify while unavailable.
     if active ~= true then
-        return true
+        return true, "session_inactive", active
     end
 
-    return false
+    return false, nil, active
 end
 
 -- Apply correct state
-local function apply_state()
-    if should_skip_for_inactive_session() then
+local function apply_state(source)
+    local start, end_time = read_config()
+    local skip, reason, active = should_skip_for_inactive_session()
+    if skip then
+        debug_log("skip apply_state source=" .. tostring(source) .. " reason=" .. tostring(reason) .. " active=" .. tostring(active))
         return
     end
 
-    local should_be_on = should_be_grayscale()
+    local should_be_on = should_be_grayscale(start, end_time)
     local is_on = is_grayscale_on()
+    debug_log("apply_state source=" .. tostring(source) .. " should_be_on=" .. tostring(should_be_on) .. " is_on=" .. tostring(is_on))
     
     if should_be_on and not is_on then
+        debug_log("attempt turn ON")
         toggle_grayscale()
         hs.timer.usleep(300000)
         if is_grayscale_on() then
@@ -117,6 +133,7 @@ local function apply_state()
             log_every_five_failures("on")
         end
     elseif not should_be_on and is_on then
+        debug_log("attempt turn OFF")
         toggle_grayscale()
         hs.timer.usleep(300000)
         if not is_grayscale_on() then
@@ -139,29 +156,34 @@ local function apply_state()
 end
 
 -- Check every 60 seconds
-local apply_state_timer = hs.timer.doEvery(60, apply_state)
+local apply_state_timer = hs.timer.doEvery(60, function()
+    apply_state("timer")
+end)
 
 -- Apply immediately on load
-apply_state()
+apply_state("startup")
 
 -- Coalesce wake/unlock events into one delayed apply_state run.
 local wake_apply_timer = nil
-local function queue_apply_state()
+local function queue_apply_state(source)
+    debug_log("queue apply_state source=" .. tostring(source))
     hs.notify.withdrawAll()
     if wake_apply_timer then
         wake_apply_timer:stop()
     end
-    wake_apply_timer = hs.timer.doAfter(1, apply_state)
+    wake_apply_timer = hs.timer.doAfter(1, function()
+        apply_state("event:" .. tostring(source))
+    end)
 end
 
 -- Apply on key session-activation events.
 local caffeinate_watcher = hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
-        queue_apply_state()
+        queue_apply_state("systemDidWake")
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
-        queue_apply_state()
+        queue_apply_state("screensDidUnlock")
     elseif event == hs.caffeinate.watcher.sessionDidBecomeActive then
-        queue_apply_state()
+        queue_apply_state("sessionDidBecomeActive")
     end
 end)
 caffeinate_watcher:start()
