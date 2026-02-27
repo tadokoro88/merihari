@@ -1,12 +1,42 @@
 -- Merihari for Hammerspoon
 -- Automatically toggles grayscale based on time window
 
+-- ============================================================================
+-- Runtime and config
+-- ============================================================================
+
 local config_file = os.getenv("HOME") .. "/.config/merihari/config"
+_G.merihari_runtime = _G.merihari_runtime or {}
+local runtime = _G.merihari_runtime
+
 local debug_mode = false
-local consecutive_failures = {
-    on = 0,
-    off = 0,
-}
+local consecutive_failures = { on = 0, off = 0 }
+
+local function read_config()
+    local file = io.open(config_file, "r")
+    if not file then
+        debug_mode = false
+        return "2100", "0600", false
+    end
+
+    local start, end_time, debug = "2100", "0600", "0"
+    for line in file:lines() do
+        local s = line:match("START=(%d+)")
+        local e = line:match("END=(%d+)")
+        local d = line:match("DEBUG=(%d+)")
+        if s then start = s end
+        if e then end_time = e end
+        if d then debug = d end
+    end
+    file:close()
+
+    debug_mode = (debug == "1")
+    return start, end_time, debug_mode
+end
+
+-- ============================================================================
+-- Logging and counters
+-- ============================================================================
 
 local function debug_log(message)
     if debug_mode then
@@ -31,58 +61,24 @@ local function log_every_five_failures(mode)
     end
 end
 
--- Read config
-local function read_config()
-    local file = io.open(config_file, "r")
-    if not file then
-        debug_mode = false
-        return "2100", "0600", false  -- defaults
-    end
-    
-    local start, end_time, debug = "2100", "0600", "0"
-    for line in file:lines() do
-        local s = line:match("START=(%d+)")
-        local e = line:match("END=(%d+)")
-        local d = line:match("DEBUG=(%d+)")
-        if s then start = s end
-        if e then end_time = e end
-        if d then debug = d end
-    end
-    file:close()
-    debug_mode = (debug == "1")
-    return start, end_time, debug_mode
-end
+-- ============================================================================
+-- State probes
+-- ============================================================================
 
--- Check if current time is in window
 local function should_be_grayscale(start, end_time)
-    local now = os.date("%H%M")
-    
-    start = tonumber(start)
-    end_time = tonumber(end_time)
-    now = tonumber(now)
-    
-    if start < end_time then
-        -- Same day window (e.g., 0900-1800)
-        return now >= start and now < end_time
-    else
-        -- Overnight window (e.g., 2100-0600)
-        return now >= start or now < end_time
+    local now = tonumber(os.date("%H%M"))
+    local start_num = tonumber(start)
+    local end_num = tonumber(end_time)
+
+    if start_num < end_num then
+        return now >= start_num and now < end_num
     end
+    return now >= start_num or now < end_num
 end
 
--- Get current grayscale state
 local function is_grayscale_on()
     local result = hs.execute("defaults read com.apple.universalaccess grayscale 2>/dev/null || echo 0")
     return result:match("1") ~= nil
-end
-
--- Toggle grayscale
-local function toggle_grayscale()
-    hs.osascript.applescript([[
-        tell application "System Events"
-            key code 96 using {command down, option down}
-        end tell
-    ]])
 end
 
 local function session_looks_active()
@@ -101,15 +97,41 @@ end
 
 local function should_skip_for_inactive_session()
     local active = session_looks_active()
-    -- Treat unknown session state as inactive to avoid toggling/notify while unavailable.
     if active ~= true then
         return true, "session_inactive", active
     end
-
     return false, nil, active
 end
 
--- Apply correct state
+-- ============================================================================
+-- Actions
+-- ============================================================================
+
+local function toggle_grayscale()
+    hs.osascript.applescript([[
+        tell application "System Events"
+            key code 96 using {command down, option down}
+        end tell
+    ]])
+end
+
+local function send_in_window_notification()
+    hs.notify.new({
+        title = "Merihari",
+        informativeText = "メリハリつけていきましょう",
+        soundName = "default",
+        withdrawAfter = 0
+    }):send()
+end
+
+local function flush_notifications()
+    hs.notify.withdrawAll()
+end
+
+-- ============================================================================
+-- Controller
+-- ============================================================================
+
 local function apply_state(source)
     local start, end_time = read_config()
     local skip, reason, active = should_skip_for_inactive_session()
@@ -121,7 +143,7 @@ local function apply_state(source)
     local should_be_on = should_be_grayscale(start, end_time)
     local is_on = is_grayscale_on()
     debug_log("apply_state source=" .. tostring(source) .. " should_be_on=" .. tostring(should_be_on) .. " is_on=" .. tostring(is_on))
-    
+
     if should_be_on and not is_on then
         debug_log("attempt turn ON")
         toggle_grayscale()
@@ -143,41 +165,38 @@ local function apply_state(source)
             log_every_five_failures("off")
         end
     end
-    
-    -- Show notification every minute while in time window
+
     if should_be_on then
-        hs.notify.new({
-            title="Merihari",
-            informativeText="メリハリつけていきましょう",
-            soundName="default",
-            withdrawAfter=0
-        }):send()
+        send_in_window_notification()
     end
 end
 
--- Check every 60 seconds
-local apply_state_timer = hs.timer.doEvery(60, function()
-    apply_state("timer")
-end)
-
--- Apply immediately on load
-apply_state("startup")
-
--- Coalesce wake/unlock events into one delayed apply_state run.
-local wake_apply_timer = nil
 local function queue_apply_state(source)
     debug_log("queue apply_state source=" .. tostring(source))
-    hs.notify.withdrawAll()
-    if wake_apply_timer then
-        wake_apply_timer:stop()
+    flush_notifications()
+    if runtime.wake_apply_timer then
+        runtime.wake_apply_timer:stop()
     end
-    wake_apply_timer = hs.timer.doAfter(1, function()
+    runtime.wake_apply_timer = hs.timer.doAfter(1, function()
         apply_state("event:" .. tostring(source))
     end)
 end
 
--- Apply on key session-activation events.
-local caffeinate_watcher = hs.caffeinate.watcher.new(function(event)
+-- ============================================================================
+-- Runtime wiring
+-- ============================================================================
+
+if runtime.apply_state_timer then
+    runtime.apply_state_timer:stop()
+end
+runtime.apply_state_timer = hs.timer.doEvery(60, function()
+    apply_state("timer")
+end)
+
+if runtime.caffeinate_watcher then
+    runtime.caffeinate_watcher:stop()
+end
+runtime.caffeinate_watcher = hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
         queue_apply_state("systemDidWake")
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
@@ -186,6 +205,7 @@ local caffeinate_watcher = hs.caffeinate.watcher.new(function(event)
         queue_apply_state("sessionDidBecomeActive")
     end
 end)
-caffeinate_watcher:start()
+runtime.caffeinate_watcher:start()
 
+apply_state("startup")
 print("Merihari loaded")
