@@ -10,7 +10,11 @@ _G.merihari_runtime = _G.merihari_runtime or {}
 local runtime = _G.merihari_runtime
 
 local debug_mode = false
-local consecutive_failures = { on = 0, off = 0 }
+local failure_reset_interval_sec = 1800
+local failure_state = {
+    on = { count = 0, last_failure_ts = nil },
+    off = { count = 0, last_failure_ts = nil },
+}
 
 local function read_config()
     local file = io.open(config_file, "r")
@@ -45,19 +49,31 @@ local function debug_log(message)
 end
 
 local function reset_failure_count(mode)
-    consecutive_failures[mode] = 0
+    failure_state[mode].count = 0
+    failure_state[mode].last_failure_ts = nil
 end
 
 local function log_every_five_failures(mode)
-    consecutive_failures[mode] = consecutive_failures[mode] + 1
-    debug_log(mode .. " failure count=" .. tostring(consecutive_failures[mode]))
-    if consecutive_failures[mode] >= 5 then
+    local now_ts = os.time()
+    local state = failure_state[mode]
+
+    if state.last_failure_ts and (now_ts - state.last_failure_ts) > failure_reset_interval_sec then
+        debug_log(mode .. " failure count reset (gap > " .. tostring(failure_reset_interval_sec) .. "s)")
+        state.count = 0
+    end
+
+    state.count = state.count + 1
+    state.last_failure_ts = now_ts
+    debug_log(mode .. " failure count=" .. tostring(state.count))
+
+    if state.count >= 5 then
         if mode == "on" then
             print("Merihari: failed to turn ON (session may be locked/asleep, or accessibility/shortcut settings may be unavailable)")
         else
             print("Merihari: failed to turn OFF (session may be locked/asleep, or accessibility/shortcut settings may be unavailable)")
         end
-        consecutive_failures[mode] = 0
+        state.count = 0
+        state.last_failure_ts = nil
     end
 end
 
