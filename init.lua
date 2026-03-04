@@ -198,6 +198,47 @@ local function queue_apply_state(source)
     end)
 end
 
+local function resync_after_screen_change()
+    local start, end_time = read_config()
+    local skip, reason, active = should_skip_for_inactive_session()
+    if skip then
+        debug_log("skip resync source=screenChanged reason=" .. tostring(reason) .. " active=" .. tostring(active))
+        return
+    end
+
+    local should_be_on = should_be_grayscale(start, end_time)
+    local is_on = is_grayscale_on()
+    debug_log("screenChanged resync should_be_on=" .. tostring(should_be_on) .. " is_on=" .. tostring(is_on))
+
+    -- Force a global re-apply across displays by toggling to opposite then back to desired.
+    if should_be_on then
+        if is_on then
+            debug_log("screenChanged resync: ON->OFF->ON")
+            toggle_grayscale()
+            hs.timer.usleep(400000)
+            toggle_grayscale()
+        else
+            debug_log("screenChanged resync: OFF->ON")
+            toggle_grayscale()
+        end
+    else
+        if not is_on then
+            debug_log("screenChanged resync: OFF->ON->OFF")
+            toggle_grayscale()
+            hs.timer.usleep(400000)
+            toggle_grayscale()
+        else
+            debug_log("screenChanged resync: ON->OFF")
+            toggle_grayscale()
+        end
+    end
+
+    -- Run normal state correction after resync.
+    hs.timer.doAfter(1, function()
+        apply_state("event:screenChanged")
+    end)
+end
+
 -- ============================================================================
 -- Runtime wiring
 -- ============================================================================
@@ -222,6 +263,21 @@ runtime.caffeinate_watcher = hs.caffeinate.watcher.new(function(event)
     end
 end)
 runtime.caffeinate_watcher:start()
+
+if runtime.screen_watcher then
+    runtime.screen_watcher:stop()
+end
+if runtime.screen_apply_timer then
+    runtime.screen_apply_timer:stop()
+end
+runtime.screen_watcher = hs.screen.watcher.new(function()
+    debug_log("queue resync source=screenChanged")
+    if runtime.screen_apply_timer then
+        runtime.screen_apply_timer:stop()
+    end
+    runtime.screen_apply_timer = hs.timer.doAfter(2, resync_after_screen_change)
+end)
+runtime.screen_watcher:start()
 
 apply_state("startup")
 print("Merihari loaded")
