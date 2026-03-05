@@ -10,11 +10,14 @@ _G.merihari_runtime = _G.merihari_runtime or {}
 local runtime = _G.merihari_runtime
 
 local debug_mode = false
+local screen_resync_cooldown_sec = 20
 local failure_reset_interval_sec = 1800
 local failure_state = {
     on = { count = 0, last_failure_ts = nil },
     off = { count = 0, last_failure_ts = nil },
 }
+runtime.screen_resync_allowed = (runtime.screen_resync_allowed ~= false)
+runtime.last_screen_resync_ts = runtime.last_screen_resync_ts or 0
 
 local function read_config()
     local file = io.open(config_file, "r")
@@ -199,6 +202,18 @@ local function queue_apply_state(source)
 end
 
 local function resync_after_screen_change()
+    if not runtime.screen_resync_allowed then
+        debug_log("skip resync source=screenChanged reason=await_unlock")
+        return
+    end
+
+    local now_ts = os.time()
+    if (now_ts - runtime.last_screen_resync_ts) < screen_resync_cooldown_sec then
+        debug_log("skip resync source=screenChanged reason=cooldown")
+        return
+    end
+    runtime.last_screen_resync_ts = now_ts
+
     local start, end_time = read_config()
     local skip, reason, active = should_skip_for_inactive_session()
     if skip then
@@ -255,11 +270,22 @@ if runtime.caffeinate_watcher then
 end
 runtime.caffeinate_watcher = hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
+        runtime.screen_resync_allowed = false
         queue_apply_state("systemDidWake")
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
+        runtime.screen_resync_allowed = true
         queue_apply_state("screensDidUnlock")
     elseif event == hs.caffeinate.watcher.sessionDidBecomeActive then
+        runtime.screen_resync_allowed = true
         queue_apply_state("sessionDidBecomeActive")
+    elseif event == hs.caffeinate.watcher.screensDidLock then
+        runtime.screen_resync_allowed = false
+    elseif event == hs.caffeinate.watcher.systemWillSleep then
+        runtime.screen_resync_allowed = false
+    elseif event == hs.caffeinate.watcher.sessionDidResignActive then
+        runtime.screen_resync_allowed = false
+    elseif event == hs.caffeinate.watcher.screensDidSleep then
+        runtime.screen_resync_allowed = false
     end
 end)
 runtime.caffeinate_watcher:start()
