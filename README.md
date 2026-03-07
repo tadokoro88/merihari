@@ -7,6 +7,41 @@ representing the healthy rhythm between focused work and proper rest.
 It uses macOS built-in accessibility features and Hammerspoon.
 Simple, lightweight, and reliable.
 
+## Quick Start (English)
+
+### Requirements
+- macOS
+- [Hammerspoon](https://www.hammerspoon.org/) (`brew install --cask hammerspoon`)
+
+### Install
+1. Ensure **System Settings > Accessibility > Display > Color Filters** is set to **Grayscale**
+2. Ensure **System Settings > Accessibility > Shortcut** has only **Color Filters** checked
+3. Clone and run setup:
+   ```bash
+   git clone https://github.com/tadokoro88/merihari.git
+   cd merihari
+   ./setup.sh
+   ```
+4. Launch Hammerspoon, grant Accessibility permissions, and allow notifications
+5. Enable "Launch Hammerspoon at login" in Hammerspoon Preferences
+6. Click the Hammerspoon menu bar icon > **Reload Config**
+
+### How it works
+- Checks every 60 seconds and toggles grayscale on/off based on your configured time window
+- During the active window: grayscale is enforced and a reminder notification is sent every minute
+- Manual overrides are automatically corrected within 60 seconds
+- Skips toggling during lock/sleep; resyncs on wake/unlock
+- On display connect/disconnect, forces a display refresh to keep filters consistent
+
+### Uninstall
+```bash
+cd merihari
+./delete.sh
+```
+Then click Hammerspoon menu bar icon > **Reload Config**.
+
+---
+
 # Merihari (macOS)
 指定した時間帯は画面をグレースケールにします（例: 21:00-翌6:00）。
 macOS標準のアクセシビリティ設定（grayscale）を Hammerspoon で自動切替します。

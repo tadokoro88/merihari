@@ -40,6 +40,13 @@ if [[ "$START" -ge 2400 ]] || [[ "$END" -ge 2400 ]]; then
   exit 1
 fi
 
+START_M=${START:2:2}
+END_M=${END:2:2}
+if [[ "$START_M" -ge 60 ]] || [[ "$END_M" -ge 60 ]]; then
+  echo "ERROR: Minutes must be between 00 and 59"
+  exit 1
+fi
+
 # Save config
 cat > "$CONFIG_FILE" <<EOF
 START=$START
