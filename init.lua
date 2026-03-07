@@ -169,25 +169,27 @@ local function apply_state(source)
     if should_be_on and not is_on then
         debug_log("attempt turn ON")
         toggle_grayscale()
-        hs.timer.usleep(300000)
-        if is_grayscale_on() then
-            reset_failure_count("on")
-            runtime.last_toggle_ts = os.time()
-            print("Merihari: turned ON")
-        else
-            log_every_five_failures("on")
-        end
+        hs.timer.doAfter(0.3, function()
+            if is_grayscale_on() then
+                reset_failure_count("on")
+                runtime.last_toggle_ts = os.time()
+                print("Merihari: turned ON")
+            else
+                log_every_five_failures("on")
+            end
+        end)
     elseif not should_be_on and is_on then
         debug_log("attempt turn OFF")
         toggle_grayscale()
-        hs.timer.usleep(300000)
-        if not is_grayscale_on() then
-            reset_failure_count("off")
-            runtime.last_toggle_ts = os.time()
-            print("Merihari: turned OFF")
-        else
-            log_every_five_failures("off")
-        end
+        hs.timer.doAfter(0.3, function()
+            if not is_grayscale_on() then
+                reset_failure_count("off")
+                runtime.last_toggle_ts = os.time()
+                print("Merihari: turned OFF")
+            else
+                log_every_five_failures("off")
+            end
+        end)
     end
 
     if should_be_on then
@@ -227,42 +229,29 @@ local function resync_after_screen_change()
 
     runtime.last_screen_resync_ts = now_ts
 
-    local start, end_time = read_config()
     local skip, reason, active = should_skip_for_inactive_session()
     if skip then
         debug_log("skip resync source=screenChanged reason=" .. tostring(reason) .. " active=" .. tostring(active))
         return
     end
 
+    local start, end_time = read_config()
     local should_be_on = should_be_grayscale(start, end_time)
     local is_on = is_grayscale_on()
     debug_log("screenChanged resync should_be_on=" .. tostring(should_be_on) .. " is_on=" .. tostring(is_on))
 
-    -- Force a global re-apply across displays by toggling to opposite then back to desired.
-    if should_be_on then
-        if is_on then
-            debug_log("screenChanged resync: ON->OFF->ON")
-            toggle_grayscale()
-            hs.timer.usleep(400000)
-            toggle_grayscale()
-        else
-            debug_log("screenChanged resync: OFF->ON")
-            toggle_grayscale()
-        end
+    -- Force display refresh: double-toggle if already correct, single toggle if not.
+    if should_be_on == is_on then
+        debug_log("screenChanged resync: double-toggle to refresh displays")
+        toggle_grayscale()
+        hs.timer.doAfter(0.4, function() toggle_grayscale() end)
     else
-        if not is_on then
-            debug_log("screenChanged resync: OFF->ON->OFF")
-            toggle_grayscale()
-            hs.timer.usleep(400000)
-            toggle_grayscale()
-        else
-            debug_log("screenChanged resync: ON->OFF")
-            toggle_grayscale()
-        end
+        debug_log("screenChanged resync: single toggle to correct state")
+        toggle_grayscale()
     end
 
-    -- Run normal state correction after resync.
-    hs.timer.doAfter(1, function()
+    -- Run normal state correction after resync settles.
+    hs.timer.doAfter(1.5, function()
         apply_state("event:screenChanged")
     end)
 end
