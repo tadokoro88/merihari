@@ -21,6 +21,12 @@ When session is active:
 When session is inactive:
 - Skip toggle and notification.
 
+Session-inactive detection is two-layered:
+1. `screens_awake` flag (event-driven): `false` after screens-sleep / system-will-sleep events, `true` after screens-wake / unlock / session-activation events. This catches lid-closed dark wakes, where the session properties probe still reports an unlocked session and toggle keystrokes would bounce off the sleeping session (audible error beep every cycle).
+2. Session properties probe: skip when the screen is locked or the session is off-console.
+
+`screens_awake` defaults to open (awake) on load/reload so a missed event can never permanently stall enforcement; unlock and session-activation events also reopen it as fallbacks. `systemDidWake` must NOT reopen it, because maintenance (dark) wakes fire that event with the lid still closed.
+
 ## Event Behavior
 On session activation-related events (wake/unlock/become-active):
 1. Flush outstanding notifications.

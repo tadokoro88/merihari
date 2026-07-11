@@ -17,6 +17,7 @@ local failure_state = {
     off = { count = 0, last_failure_ts = nil },
 }
 runtime.screen_resync_allowed = (runtime.screen_resync_allowed ~= false)
+runtime.screens_awake = (runtime.screens_awake ~= false)
 runtime.last_screen_resync_ts = runtime.last_screen_resync_ts or 0
 
 local function read_config()
@@ -115,6 +116,11 @@ local function session_looks_active()
 end
 
 local function should_skip_for_inactive_session()
+    -- sessionProperties can report an unlocked session during lid-closed dark
+    -- wakes, so the event-driven screens_awake flag is checked first.
+    if runtime.screens_awake == false then
+        return true, "screens_asleep", false
+    end
     local active = session_looks_active()
     if active ~= true then
         return true, "session_inactive", active
@@ -261,22 +267,31 @@ if runtime.caffeinate_watcher then
 end
 runtime.caffeinate_watcher = hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
+        -- Dark wakes (lid closed, maintenance) also fire this event,
+        -- so it must not open the screens_awake gate.
         runtime.screen_resync_allowed = false
         queue_apply_state("systemDidWake")
+    elseif event == hs.caffeinate.watcher.screensDidWake then
+        runtime.screens_awake = true
+        queue_apply_state("screensDidWake")
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
         runtime.screen_resync_allowed = true
+        runtime.screens_awake = true
         queue_apply_state("screensDidUnlock")
     elseif event == hs.caffeinate.watcher.sessionDidBecomeActive then
         runtime.screen_resync_allowed = true
+        runtime.screens_awake = true
         queue_apply_state("sessionDidBecomeActive")
     elseif event == hs.caffeinate.watcher.screensDidLock then
         runtime.screen_resync_allowed = false
     elseif event == hs.caffeinate.watcher.systemWillSleep then
         runtime.screen_resync_allowed = false
+        runtime.screens_awake = false
     elseif event == hs.caffeinate.watcher.sessionDidResignActive then
         runtime.screen_resync_allowed = false
     elseif event == hs.caffeinate.watcher.screensDidSleep then
         runtime.screen_resync_allowed = false
+        runtime.screens_awake = false
     end
 end)
 runtime.caffeinate_watcher:start()
