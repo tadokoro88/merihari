@@ -43,10 +43,9 @@ When an external display is connected/disconnected (screen topology change), mac
 On topology change (debounced by 2 seconds):
 1. Skip if session is locked/asleep (`screen_resync_allowed` flag).
 2. Skip if within cooldown period (20 seconds since last resync).
-3. Skip if no recent toggle or activation event occurred (within 300 seconds).
-4. If the current filter state already matches the desired state, double-toggle (off-on or on-off-on) to force macOS to refresh the filter across all displays.
-5. If the state is wrong, single-toggle to correct it.
-6. After resync settles, run a normal `apply_state()` for verification.
+3. If the current filter state already matches the desired state, double-toggle (off-on or on-off-on) to force macOS to refresh the filter across all displays.
+4. If the state is wrong, single-toggle to correct it.
+5. After resync settles, run a normal `apply_state()` for verification.
 
 The `screen_resync_allowed` flag is set to `false` on lock/sleep events and `true` on unlock/activation events, preventing resync attempts during inactive sessions.
 

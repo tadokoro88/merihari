@@ -11,7 +11,6 @@ local runtime = _G.merihari_runtime
 
 local debug_mode = false
 local screen_resync_cooldown_sec = 20
-local screen_resync_recent_window_sec = 300
 local failure_reset_interval_sec = 1800
 local failure_state = {
     on = { count = 0, last_failure_ts = nil },
@@ -19,8 +18,6 @@ local failure_state = {
 }
 runtime.screen_resync_allowed = (runtime.screen_resync_allowed ~= false)
 runtime.last_screen_resync_ts = runtime.last_screen_resync_ts or 0
-runtime.last_toggle_ts = runtime.last_toggle_ts or 0
-runtime.last_activation_ts = runtime.last_activation_ts or 0
 
 local function read_config()
     local file = io.open(config_file, "r")
@@ -130,11 +127,12 @@ end
 -- ============================================================================
 
 local function toggle_grayscale()
-    hs.osascript.applescript([[
+    local ok, result, raw = hs.osascript.applescript([[
         tell application "System Events"
             key code 96 using {command down, option down}
         end tell
     ]])
+    debug_log("toggle result ok=" .. tostring(ok) .. " result=" .. tostring(result) .. " raw=" .. tostring(raw))
 end
 
 local function send_in_window_notification()
@@ -172,7 +170,6 @@ local function apply_state(source)
         hs.timer.doAfter(0.3, function()
             if is_grayscale_on() then
                 reset_failure_count("on")
-                runtime.last_toggle_ts = os.time()
                 print("Merihari: turned ON")
             else
                 log_every_five_failures("on")
@@ -184,7 +181,6 @@ local function apply_state(source)
         hs.timer.doAfter(0.3, function()
             if not is_grayscale_on() then
                 reset_failure_count("off")
-                runtime.last_toggle_ts = os.time()
                 print("Merihari: turned OFF")
             else
                 log_every_five_failures("off")
@@ -217,13 +213,6 @@ local function resync_after_screen_change()
     local now_ts = os.time()
     if (now_ts - runtime.last_screen_resync_ts) < screen_resync_cooldown_sec then
         debug_log("skip resync source=screenChanged reason=cooldown")
-        return
-    end
-
-    local has_recent_toggle = (runtime.last_toggle_ts > 0) and ((now_ts - runtime.last_toggle_ts) <= screen_resync_recent_window_sec)
-    local has_recent_activation = (runtime.last_activation_ts > 0) and ((now_ts - runtime.last_activation_ts) <= screen_resync_recent_window_sec)
-    if not has_recent_toggle and not has_recent_activation then
-        debug_log("skip resync source=screenChanged reason=no_recent_transition")
         return
     end
 
@@ -273,15 +262,12 @@ end
 runtime.caffeinate_watcher = hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
         runtime.screen_resync_allowed = false
-        runtime.last_activation_ts = os.time()
         queue_apply_state("systemDidWake")
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
         runtime.screen_resync_allowed = true
-        runtime.last_activation_ts = os.time()
         queue_apply_state("screensDidUnlock")
     elseif event == hs.caffeinate.watcher.sessionDidBecomeActive then
         runtime.screen_resync_allowed = true
-        runtime.last_activation_ts = os.time()
         queue_apply_state("sessionDidBecomeActive")
     elseif event == hs.caffeinate.watcher.screensDidLock then
         runtime.screen_resync_allowed = false
