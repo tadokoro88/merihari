@@ -47,3 +47,7 @@
 10. Long-run scheduler continuity
 - Setup: leave app running across sleep/wake and several hours.
 - Expect: debug timer logs continue; checks do not silently stop.
+
+11. Lid closed across END boundary (dark wake)
+- Setup: grayscale ON in-window, close the lid before END, keep the Mac on AC power, cross END while closed.
+- Expect: no `attempt turn OFF` logs and no error beeps while closed (debug log shows `skip apply_state ... reason=screens_asleep`); after opening and unlocking, grayscale turns OFF within ~1 minute.
